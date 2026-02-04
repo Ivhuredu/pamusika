@@ -1,12 +1,26 @@
 from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
-from db import get_db
+import psycopg2
+import os
 
 app = Flask(__name__)
 
-# ---------------------------
-# DATABASE SEARCH FUNCTION
-# ---------------------------
+# -------------------------
+# DATABASE CONNECTION
+# -------------------------
+
+def get_db():
+    return psycopg2.connect(
+        host=os.environ["DB_HOST"],
+        database=os.environ["DB_NAME"],
+        user=os.environ["DB_USER"],
+        password=os.environ["DB_PASSWORD"],
+        port=os.environ.get("DB_PORT", 5432)
+    )
+
+# -------------------------
+# SEARCH FUNCTION
+# -------------------------
 
 def search_products(keyword):
     conn = get_db()
@@ -26,10 +40,9 @@ def search_products(keyword):
 
     return results
 
-
-# ---------------------------
-# MAIN WEBHOOK
-# ---------------------------
+# -------------------------
+# WHATSAPP WEBHOOK
+# -------------------------
 
 @app.route("/webhook", methods=["POST"])
 def bot():
@@ -38,54 +51,42 @@ def bot():
     resp = MessagingResponse()
     msg = resp.message()
 
-    # ---- MENU ----
+    # MENU
     if incoming in ["menu", "hi", "hello", "start"]:
-
         msg.body(
-            "🛒 Welcome to PaMusika Marketplace\n\n"
-            "Reply with:\n"
+            "🛒 PaMusika Marketplace\n\n"
             "1️⃣ Search product\n"
             "2️⃣ View sample products\n"
             "3️⃣ Help\n\n"
-            "Example: cement"
+            "Type product name (eg: cement)"
         )
-
         return str(resp)
 
-    # ---- SAMPLE PRODUCTS ----
+    # SAMPLE PRODUCTS
     if incoming == "2":
-
         msg.body(
-            "📦 Sample products available:\n\n"
+            "📦 Available samples:\n\n"
             "• cement\n"
             "• sugar\n"
             "• rice\n"
             "• cooking oil\n\n"
-            "Type product name to search."
+            "Type product name."
         )
-
         return str(resp)
 
-    # ---- HELP ----
+    # HELP
     if incoming == "3":
-
         msg.body(
-            "ℹ How to use PaMusika:\n\n"
-            "👉 Type product name\n"
-            "Example: cement\n\n"
-            "The bot will show suppliers and prices."
+            "ℹ Just type what you're looking for.\n\n"
+            "Example: cement"
         )
-
         return str(resp)
 
-    # ---- PRODUCT SEARCH ----
+    # SEARCH
     results = search_products(incoming)
 
     if not results:
-        msg.body(
-            "❌ No suppliers found.\n\n"
-            "Type MENU to see options."
-        )
+        msg.body("❌ No results found. Type MENU.")
         return str(resp)
 
     reply = f"📦 Results for '{incoming}':\n\n"
@@ -108,5 +109,7 @@ def bot():
 
 if __name__ == "__main__":
     app.run()
+
+
 
 
