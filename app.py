@@ -4,6 +4,10 @@ from db import get_db
 
 app = Flask(__name__)
 
+# ---------------------------
+# DATABASE SEARCH FUNCTION
+# ---------------------------
+
 def search_products(keyword):
     conn = get_db()
     cur = conn.cursor()
@@ -23,21 +27,65 @@ def search_products(keyword):
     return results
 
 
-@app.route("/whatsapp", methods=["POST"])
-def whatsapp_bot():
+# ---------------------------
+# MAIN WEBHOOK
+# ---------------------------
+
+@app.route("/webhook", methods=["POST"])
+def bot():
     incoming = request.form.get("Body", "").strip().lower()
 
     resp = MessagingResponse()
     msg = resp.message()
 
-    if not incoming:
-        msg.body("Type a product name to search.")
+    # ---- MENU ----
+    if incoming in ["menu", "hi", "hello", "start"]:
+
+        msg.body(
+            "🛒 Welcome to PaMusika Marketplace\n\n"
+            "Reply with:\n"
+            "1️⃣ Search product\n"
+            "2️⃣ View sample products\n"
+            "3️⃣ Help\n\n"
+            "Example: cement"
+        )
+
         return str(resp)
 
+    # ---- SAMPLE PRODUCTS ----
+    if incoming == "2":
+
+        msg.body(
+            "📦 Sample products available:\n\n"
+            "• cement\n"
+            "• sugar\n"
+            "• rice\n"
+            "• cooking oil\n\n"
+            "Type product name to search."
+        )
+
+        return str(resp)
+
+    # ---- HELP ----
+    if incoming == "3":
+
+        msg.body(
+            "ℹ How to use PaMusika:\n\n"
+            "👉 Type product name\n"
+            "Example: cement\n\n"
+            "The bot will show suppliers and prices."
+        )
+
+        return str(resp)
+
+    # ---- PRODUCT SEARCH ----
     results = search_products(incoming)
 
     if not results:
-        msg.body("❌ No suppliers found. Try another product.")
+        msg.body(
+            "❌ No suppliers found.\n\n"
+            "Type MENU to see options."
+        )
         return str(resp)
 
     reply = f"📦 Results for '{incoming}':\n\n"
@@ -59,4 +107,6 @@ def whatsapp_bot():
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run()
+
+
