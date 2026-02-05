@@ -405,7 +405,7 @@ def bot():
     for row in results:
          product_id, name, price, category, seller, location, phone, photos = row
 
-           if photos:
+        if photos:
             for img in photos:
                 msg.media(img)
 
@@ -422,6 +422,7 @@ def bot():
 
 if __name__ == "__main__":
     app.run()
+
 
 
 
