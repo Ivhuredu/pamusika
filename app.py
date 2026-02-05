@@ -403,25 +403,26 @@ def bot():
     reply = f"📦 Results for '{incoming}':\n\n"
 
     for row in results:
-    product_id, name, price, category, seller, location, phone, photos = row
+         product_id, name, price, category, seller, location, phone, photos = row
 
-    if photos:
-        for img in photos:
-            msg.media(img)
+           if photos:
+            for img in photos:
+                msg.media(img)
 
-    msg.body(
-        f"{seller}\n"
-        f"🛒 {name} ({category})\n"
-        f"💵 {price}\n"
-        f"📍 {location}\n"
-        f"📞 {phone}"
-    )
+        msg.body(
+            f"{seller}\n"
+            f"🛒 {name} ({category})\n"
+            f"💵 {price}\n"
+            f"📍 {location}\n"
+            f"📞 {phone}"
+        )
 
-    msg.body(reply)
-    return str(resp)
+        msg.body(reply)
+        return str(resp)
 
 if __name__ == "__main__":
     app.run()
+
 
 
 
