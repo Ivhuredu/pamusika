@@ -417,11 +417,12 @@ def bot():
             f"📞 {phone}"
         )
 
-        msg.body(reply)
-        return str(resp)
+msg.body(reply)
+return str(resp)
 
 if __name__ == "__main__":
     app.run()
+
 
 
 
