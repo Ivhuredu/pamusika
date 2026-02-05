@@ -47,7 +47,7 @@ def search_products(text):
 
     if location:
         cur.execute("""
-            SELECT p.name, p.price, p.category, s.name, s.location, s.phone
+            SELECT p.name, p.price, p.category, p.image_url, s.name, s.location, s.phone
             FROM products p
             JOIN sellers s ON p.seller_id = s.id
             WHERE (LOWER(p.name) LIKE %s OR LOWER(p.category) LIKE %s)
@@ -55,7 +55,7 @@ def search_products(text):
         """, (f"%{product}%", f"%{product}%", f"%{location}%"))
     else:
         cur.execute("""
-            SELECT p.name, p.price, p.category, s.name, s.location, s.phone
+            SELECT p.name, p.price, p.category, p.image_url, s.name, s.location, s.phone
             FROM products p
             JOIN sellers s ON p.seller_id = s.id
             WHERE LOWER(p.name) LIKE %s
@@ -88,18 +88,65 @@ def add_seller(name, phone, location):
 
     return seller_id
 
-def add_product(name, price, seller_id, category):
+def add_product(name, price, seller_id, category, image_url):
     conn = get_db()
     cur = conn.cursor()
 
     cur.execute("""
-        INSERT INTO products (name, price, seller_id, category)
-        VALUES (%s, %s, %s, %s)
-    """, (name, price, seller_id, category))
+        INSERT INTO products (name, price, seller_id, category, image_url)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (name, price, seller_id, category, image_url))
 
     conn.commit()
     cur.close()
     conn.close()
+
+def get_seller_products(phone):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT p.id, p.name, p.price, p.category
+        FROM products p
+        JOIN sellers s ON p.seller_id = s.id
+        WHERE s.phone = %s
+    """, (phone,))
+
+    results = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    return results
+
+
+def update_product_price(product_id, new_price):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("""
+        UPDATE products
+        SET price = %s
+        WHERE id = %s
+    """, (new_price, product_id))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def delete_product(product_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("""
+        DELETE FROM products
+        WHERE id = %s
+    """, (product_id,))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
 
 
 # -------------------------
@@ -169,17 +216,30 @@ def bot():
 
     # PRICE → SAVE PRODUCT
     if user_states.get(user) == "price":
-      add_product(
-          user_data[user]["product"],
-             incoming,
-             user_data[user]["seller_id"],
-             user_data[user]["category"]
-      )
+        user_data[user]["price"] = incoming
+        user_states[user] = "photo"
+        msg.body("📷 Please send a photo of the product.")
+        return str(resp)
 
-      user_states[user] = "more"
-      msg.body("✅ Product added!\n\nAdd another product? (yes/no)")
-      return str(resp)
+    if user_states.get(user) == "photo":
 
+       image_url = request.form.get("MediaUrl0")
+
+       if not image_url:
+           msg.body("❗ Please send an image (not text).")
+           return str(resp)
+
+       add_product(
+           user_data[user]["product"],
+           user_data[user]["price"],
+           user_data[user]["seller_id"],
+           user_data[user]["category"],
+           image_url
+       )
+
+       user_states[user] = "more"
+       msg.body("✅ Product added with photo!\n\nAdd another product? (yes/no)")
+       return str(resp)
 
     # ADD MORE?
     if user_states.get(user) == "more":
@@ -196,6 +256,57 @@ def bot():
             msg.body("🎉 Registration complete! All products listed.")
             return str(resp)
 
+   if incoming == "myproducts":
+       phone = request.form.get("From").split(":")[-1]
+
+       products = get_seller_products(phone)
+
+       if not products:
+           msg.body("❌ You have no products listed.")
+           return str(resp)
+
+       reply = "📦 Your products:\n\n"
+
+       for pid, name, price, category in products:
+        reply += f"{pid}. {name} ({category}) - {price}\n"
+
+       reply += "\n✏ To edit: edit PRODUCT_ID NEWPRICE\n🗑 To delete: delete PRODUCT_ID"
+
+   if incoming.startswith("edit"):
+        parts = incoming.split()
+
+        if len(parts) < 3:
+            msg.body("Usage: edit PRODUCT_ID NEWPRICE\nExample: edit 3 9usd")
+            return str(resp)
+
+        product_id = parts[1]
+        new_price = parts[2]
+
+        update_product_price(product_id, new_price)
+
+        msg.body("✅ Price updated successfully!")
+        return str(resp)
+
+    if incoming.startswith("delete"):
+        parts = incoming.split()
+
+        if len(parts) < 2:
+            msg.body("Usage: delete PRODUCT_ID\nExample: delete 3")
+            return str(resp)
+
+        product_id = parts[1]
+
+        delete_product(product_id)
+
+        msg.body("🗑 Product deleted successfully.")
+        return str(resp)
+
+
+
+        msg.body(reply)
+        return str(resp)
+ 
+
         msg.body("Please reply YES or NO")
         return str(resp)
 
@@ -205,9 +316,9 @@ def bot():
 
     if incoming in ["menu", "hi", "hello", "start"]:
         msg.body(
-            "🛒 PaMusika Marketplace\n\n"
-            "🔍 Type product name to search\n"
-            "📝 Type REGISTER to sell\n\n"
+            "🛒 *PaMusika Marketplace*\n\n"
+            "🔍 *Type product name to search*\n"
+            "📝 Type *REGISTER* to sell\n\n"
             "Example: cement"
         )
         return str(resp)
@@ -225,8 +336,10 @@ def bot():
     reply = f"📦 Results for '{incoming}':\n\n"
 
     for i, row in enumerate(results, 1):
-        product, price, category, seller, location, phone = row
+        product, price, category, image_url, seller, location, phone = row
 
+        msg.media(image_url)
+        msg.body(
         reply += (
              f"{i}. {seller}\n"
              f"   🛒 {product} ({category})\n"
@@ -242,6 +355,7 @@ def bot():
 
 if __name__ == "__main__":
     app.run()
+
 
 
 
