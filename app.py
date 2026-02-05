@@ -339,7 +339,7 @@ def bot():
 
        reply += "\n✏ To edit: edit PRODUCT_ID NEWPRICE\n🗑 To delete: delete PRODUCT_ID"
 
-   if incoming.startswith("edit"):
+    if incoming.startswith("edit"):
         parts = incoming.split()
 
         if len(parts) < 3:
@@ -422,6 +422,7 @@ def bot():
 
 if __name__ == "__main__":
     app.run()
+
 
 
 
