@@ -282,7 +282,7 @@ def bot():
        )
        return str(resp)
 
-   if user_states.get(user) == "photo_optional":
+    if user_states.get(user) == "photo_optional":
 
       image_url = request.form.get("MediaUrl0")
 
@@ -422,6 +422,7 @@ def bot():
 
 if __name__ == "__main__":
     app.run()
+
 
 
 
