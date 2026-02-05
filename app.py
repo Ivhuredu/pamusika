@@ -182,7 +182,7 @@ def bot():
     msg = resp.message()
 
     # -----------------
-    # START REGISTRATION
+    # REGISTRATION FLOW
     # -----------------
 
     if incoming == "register":
@@ -191,21 +191,18 @@ def bot():
         msg.body("🏪 Enter your business name:")
         return str(resp)
 
-    # BUSINESS NAME
     if user_states.get(user) == "name":
         user_data[user]["name"] = incoming
         user_states[user] = "phone"
         msg.body("📞 Enter your phone number:")
         return str(resp)
 
-    # PHONE
     if user_states.get(user) == "phone":
         user_data[user]["phone"] = incoming
         user_states[user] = "location"
-        msg.body("📍 Enter your location (city/town):")
+        msg.body("📍 Enter your location:")
         return str(resp)
 
-    # LOCATION → CREATE SELLER ONCE
     if user_states.get(user) == "location":
         user_data[user]["location"] = incoming
 
@@ -218,97 +215,64 @@ def bot():
         user_data[user]["seller_id"] = seller_id
         user_states[user] = "product"
 
-        msg.body("📦 Enter your first product name:")
+        msg.body("📦 Enter product name:")
         return str(resp)
 
-    # PRODUCT NAME
     if user_states.get(user) == "product":
         user_data[user]["product"] = incoming
         user_states[user] = "category"
-        msg.body("📂 Enter product category (food, building, electronics etc):")
+        msg.body("📂 Enter category:")
         return str(resp)
 
-    # CATEGORY
     if user_states.get(user) == "category":
         user_data[user]["category"] = incoming
         user_states[user] = "price"
         msg.body("💵 Enter price:")
         return str(resp)
 
-    # PRICE → SAVE PRODUCT
+    # SAVE PRODUCT (NO PHOTO YET)
     if user_states.get(user) == "price":
-        user_data[user]["price"] = incoming
-        user_states[user] = "photo"
-        msg.body("📷 Please send a photo of the product.")
+        product_id = add_product(
+            user_data[user]["product"],
+            incoming,
+            user_data[user]["seller_id"],
+            user_data[user]["category"]
+        )
+
+        user_data[user]["product_id"] = product_id
+        user_states[user] = "photo_optional"
+
+        msg.body(
+            "📷 Send product photo (optional).\n"
+            "Send multiple photos or type DONE.\n"
+            "Type SKIP if none."
+        )
         return str(resp)
 
-    if user_states.get(user) == "photo":
-
-       image_url = request.form.get("MediaUrl0")
-
-       if not image_url:
-           msg.body("❗ Please send an image (not text).")
-           return str(resp)
-
-       add_product(
-           user_data[user]["product"],
-           user_data[user]["price"],
-           user_data[user]["seller_id"],
-           user_data[user]["category"],
-           image_url
-       )
-
-       user_states[user] = "more"
-       msg.body("✅ Product added with photo!\n\nAdd another product? (yes/no)")
-       return str(resp)
-
-    if user_states.get(user) == "price":
-       user_data[user]["price"] = incoming
-
-       product_id = add_product(
-           user_data[user]["product"],
-           user_data[user]["price"],
-           user_data[user]["seller_id"],
-           user_data[user]["category"]
-       )
-
-       user_data[user]["product_id"] = product_id
-       user_states[user] = "photo_optional"
-
-       msg.body(
-           "📷 Send product photo (optional).\n"
-           "You can send multiple photos.\n\n"
-           "Type SKIP if no photo."
-       )
-       return str(resp)
-
+    # PHOTO HANDLING
     if user_states.get(user) == "photo_optional":
 
-      image_url = request.form.get("MediaUrl0")
+        image_url = request.form.get("MediaUrl0")
 
-      # Seller skipped photos
-      if incoming == "skip":
-          user_states[user] = "more"
-          msg.body("✅ Product saved without photo.\n\nAdd another product? (yes/no)")
-          return str(resp)
+        if incoming == "skip":
+            user_states[user] = "more"
+            msg.body("✅ Product saved!\nAdd another product? (yes/no)")
+            return str(resp)
 
-      # Seller sent a photo
-      if image_url:
-          add_product_photo(user_data[user]["product_id"], image_url)
+        if image_url:
+            add_product_photo(user_data[user]["product_id"], image_url)
+            msg.body("📸 Photo added! Send another or type DONE")
+            return str(resp)
 
-          msg.body("📸 Photo added! Send another or type DONE")
-          return str(resp)
+        if incoming == "done":
+            user_states[user] = "more"
+            msg.body("✅ Product saved!\nAdd another product? (yes/no)")
+            return str(resp)
 
-      # Seller finished adding photos
-      if incoming == "done":
-          user_states[user] = "more"
-          msg.body("✅ Product saved!\n\nAdd another product? (yes/no)")
-          return str(resp)
+        msg.body("Send photo, DONE or SKIP")
+        return str(resp)
 
-      msg.body("Send photo, DONE, or SKIP")
-      return str(resp)
- 
-    # ADD MORE?
+    # ADD MORE PRODUCTS
     if user_states.get(user) == "more":
 
         if incoming == "yes":
@@ -319,62 +283,49 @@ def bot():
         if incoming == "no":
             user_states.pop(user)
             user_data.pop(user)
-
-            msg.body("🎉 Registration complete! All products listed.")
+            msg.body("🎉 Registration complete!")
             return str(resp)
 
+    # -----------------
+    # SELLER MANAGEMENT
+    # -----------------
+
     if incoming == "myproducts":
-       phone = request.form.get("From").split(":")[-1]
+        phone = request.form.get("From").split(":")[-1]
+        products = get_seller_products(phone)
 
-       products = get_seller_products(phone)
+        if not products:
+            msg.body("❌ No products listed.")
+            return str(resp)
 
-       if not products:
-           msg.body("❌ You have no products listed.")
-           return str(resp)
+        reply = "📦 Your products:\n\n"
 
-       reply = "📦 Your products:\n\n"
+        for pid, name, price, category in products:
+            reply += f"{pid}. {name} ({category}) - {price}\n"
 
-       for pid, name, price, category in products:
-        reply += f"{pid}. {name} ({category}) - {price}\n"
+        reply += "\nEdit: edit ID NEWPRICE\nDelete: delete ID"
 
-       reply += "\n✏ To edit: edit PRODUCT_ID NEWPRICE\n🗑 To delete: delete PRODUCT_ID"
+        msg.body(reply)
+        return str(resp)
 
     if incoming.startswith("edit"):
         parts = incoming.split()
-
         if len(parts) < 3:
-            msg.body("Usage: edit PRODUCT_ID NEWPRICE\nExample: edit 3 9usd")
+            msg.body("edit PRODUCT_ID NEWPRICE")
             return str(resp)
 
-        product_id = parts[1]
-        new_price = parts[2]
-
-        update_product_price(product_id, new_price)
-
-        msg.body("✅ Price updated successfully!")
+        update_product_price(parts[1], parts[2])
+        msg.body("✅ Price updated")
         return str(resp)
 
     if incoming.startswith("delete"):
         parts = incoming.split()
-
         if len(parts) < 2:
-            msg.body("Usage: delete PRODUCT_ID\nExample: delete 3")
+            msg.body("delete PRODUCT_ID")
             return str(resp)
 
-        product_id = parts[1]
-
-        delete_product(product_id)
-
-        msg.body("🗑 Product deleted successfully.")
-        return str(resp)
-
-
-
-        msg.body(reply)
-        return str(resp)
- 
-
-        msg.body("Please reply YES or NO")
+        delete_product(parts[1])
+        msg.body("🗑 Product deleted")
         return str(resp)
 
     # -----------------
@@ -383,45 +334,43 @@ def bot():
 
     if incoming in ["menu", "hi", "hello", "start"]:
         msg.body(
-            "🛒 *PaMusika Marketplace*\n\n"
-            "🔍 *Type product name to search*\n"
-            "📝 Type *REGISTER* to sell\n\n"
+            "🛒 PaMusika Marketplace\n\n"
+            "🔍 Type product name\n"
+            "📝 Type REGISTER to sell\n\n"
             "Example: cement"
         )
         return str(resp)
 
-  # -----------------
-# SEARCH
-# -----------------
+    # -----------------
+    # SEARCH
+    # -----------------
 
-results = search_products(incoming)
+    results = search_products(incoming)
 
-if not results:
-    msg.body("❌ No results found. Type MENU.")
+    if not results:
+        msg.body("❌ No results found. Type MENU.")
+        return str(resp)
+
+    for row in results:
+        product_id, name, price, category, seller, location, phone, photos = row
+
+        if photos:
+            for img in photos:
+                msg.media(img)
+
+        msg.body(
+            f"{seller}\n"
+            f"🛒 {name} ({category})\n"
+            f"💵 {price}\n"
+            f"📍 {location}\n"
+            f"📞 {phone}"
+        )
+
     return str(resp)
-
-for row in results:
-    product_id, name, price, category, seller, location, phone, photos = row
-
-    # Send photos first (if any)
-    if photos:
-        for img in photos:
-            msg.media(img)
-
-    # Send product details
-    msg.body(
-        f"{seller}\n"
-        f"🛒 {name} ({category})\n"
-        f"💵 {price}\n"
-        f"📍 {location}\n"
-        f"📞 {phone}"
-    )
-
-return str(resp)
-
 
 if __name__ == "__main__":
     app.run()
+
 
 
 
