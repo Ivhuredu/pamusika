@@ -323,7 +323,7 @@ def bot():
             msg.body("🎉 Registration complete! All products listed.")
             return str(resp)
 
-   if incoming == "myproducts":
+    if incoming == "myproducts":
        phone = request.form.get("From").split(":")[-1]
 
        products = get_seller_products(phone)
@@ -422,6 +422,7 @@ def bot():
 
 if __name__ == "__main__":
     app.run()
+
 
 
 
