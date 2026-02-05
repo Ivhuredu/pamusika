@@ -25,7 +25,16 @@ def get_db():
 # SEARCH FUNCTION
 # -------------------------
 def search_products(text):
+    text = text.strip()
+
+    # If empty message, return nothing safely
+    if not text:
+        return []
+
     parts = text.split()
+
+    if len(parts) == 0:
+        return []
 
     product = parts[0]
     location = None
@@ -41,8 +50,7 @@ def search_products(text):
             SELECT p.name, p.price, p.category, s.name, s.location, s.phone
             FROM products p
             JOIN sellers s ON p.seller_id = s.id
-            WHERE LOWER(p.name) LIKE %s
-               OR LOWER(p.category) LIKE %s
+            WHERE (LOWER(p.name) LIKE %s OR LOWER(p.category) LIKE %s)
               AND LOWER(s.location) LIKE %s
         """, (f"%{product}%", f"%{product}%", f"%{location}%"))
     else:
@@ -234,6 +242,7 @@ def bot():
 
 if __name__ == "__main__":
     app.run()
+
 
 
 
