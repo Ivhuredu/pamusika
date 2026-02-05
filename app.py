@@ -25,29 +25,20 @@ def get_db():
 # SEARCH FUNCTION
 # -------------------------
 def search_products(text):
-    text = text.strip()
-
-    # If empty message, return nothing safely
-    if not text:
-        return []
-
-    parts = text.split()
-
-    if len(parts) == 0:
+    parts = text.strip().split()
+    if not parts:
         return []
 
     product = parts[0]
-    location = None
-
-    if len(parts) > 1:
-        location = parts[1]
+    location = parts[1] if len(parts) > 1 else None
 
     conn = get_db()
     cur = conn.cursor()
 
     if location:
         cur.execute("""
-            SELECT p.name, p.price, p.category, p.image_url, s.name, s.location, s.phone
+            SELECT p.id, p.name, p.price, p.category,
+                   s.name, s.location, s.phone
             FROM products p
             JOIN sellers s ON p.seller_id = s.id
             WHERE (LOWER(p.name) LIKE %s OR LOWER(p.category) LIKE %s)
@@ -55,19 +46,33 @@ def search_products(text):
         """, (f"%{product}%", f"%{product}%", f"%{location}%"))
     else:
         cur.execute("""
-            SELECT p.name, p.price, p.category, p.image_url, s.name, s.location, s.phone
+            SELECT p.id, p.name, p.price, p.category,
+                   s.name, s.location, s.phone
             FROM products p
             JOIN sellers s ON p.seller_id = s.id
-            WHERE LOWER(p.name) LIKE %s
-               OR LOWER(p.category) LIKE %s
+            WHERE LOWER(p.name) LIKE %s OR LOWER(p.category) LIKE %s
         """, (f"%{product}%", f"%{product}%"))
 
-    results = cur.fetchall()
+    products = cur.fetchall()
+
+    results = []
+
+    for row in products:
+        product_id = row[0]
+
+        cur.execute("""
+            SELECT image_url FROM product_photos
+            WHERE product_id = %s
+        """, (product_id,))
+
+        photos = [r[0] for r in cur.fetchall()]
+        results.append((*row, photos))
 
     cur.close()
     conn.close()
 
     return results
+
 
 
 def add_seller(name, phone, location):
@@ -100,6 +105,8 @@ def add_product(name, price, seller_id, category, image_url):
     conn.commit()
     cur.close()
     conn.close()
+    
+    return product_id
 
 def get_seller_products(phone):
     conn = get_db()
@@ -146,6 +153,20 @@ def delete_product(product_id):
     conn.commit()
     cur.close()
     conn.close()
+
+def add_product_photo(product_id, image_url):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("""
+        INSERT INTO product_photos (product_id, image_url)
+        VALUES (%s, %s)
+    """, (product_id, image_url))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
 
 
 
@@ -241,6 +262,52 @@ def bot():
        msg.body("✅ Product added with photo!\n\nAdd another product? (yes/no)")
        return str(resp)
 
+    if user_states.get(user) == "price":
+       user_data[user]["price"] = incoming
+
+       product_id = add_product(
+           user_data[user]["product"],
+           user_data[user]["price"],
+           user_data[user]["seller_id"],
+           user_data[user]["category"]
+       )
+
+       user_data[user]["product_id"] = product_id
+       user_states[user] = "photo_optional"
+
+       msg.body(
+           "📷 Send product photo (optional).\n"
+           "You can send multiple photos.\n\n"
+           "Type SKIP if no photo."
+       )
+       return str(resp)
+
+   if user_states.get(user) == "photo_optional":
+
+      image_url = request.form.get("MediaUrl0")
+
+      # Seller skipped photos
+      if incoming == "skip":
+          user_states[user] = "more"
+          msg.body("✅ Product saved without photo.\n\nAdd another product? (yes/no)")
+          return str(resp)
+
+      # Seller sent a photo
+      if image_url:
+          add_product_photo(user_data[user]["product_id"], image_url)
+
+          msg.body("📸 Photo added! Send another or type DONE")
+          return str(resp)
+
+      # Seller finished adding photos
+      if incoming == "done":
+          user_states[user] = "more"
+          msg.body("✅ Product saved!\n\nAdd another product? (yes/no)")
+          return str(resp)
+
+      msg.body("Send photo, DONE, or SKIP")
+      return str(resp)
+ 
     # ADD MORE?
     if user_states.get(user) == "more":
 
@@ -335,26 +402,27 @@ def bot():
 
     reply = f"📦 Results for '{incoming}':\n\n"
 
-    for i, row in enumerate(results, 1):
-        product, price, category, image_url, seller, location, phone = row
+    for row in results:
+    product_id, name, price, category, seller, location, phone, photos = row
 
-        msg.media(image_url)
-        msg.body(
-        reply += (
-             f"{i}. {seller}\n"
-             f"   🛒 {product} ({category})\n"
-             f"   💵 {price}\n"
-             f"   📍 {location}\n"
-             f"   📞 {phone}\n\n"
-        )
+    if photos:
+        for img in photos:
+            msg.media(img)
 
-        
+    msg.body(
+        f"{seller}\n"
+        f"🛒 {name} ({category})\n"
+        f"💵 {price}\n"
+        f"📍 {location}\n"
+        f"📞 {phone}"
+    )
 
     msg.body(reply)
     return str(resp)
 
 if __name__ == "__main__":
     app.run()
+
 
 
 
