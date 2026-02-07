@@ -25,9 +25,12 @@ def get_db():
 # SEARCH FUNCTION
 # -------------------------
 def search_products(text):
-    parts = text.strip().split()
-    if not parts:
+    text = text.strip().lower()
+
+    if not text:
         return []
+
+    parts = text.split()
 
     product = parts[0]
     location = parts[1] if len(parts) > 1 else None
@@ -41,8 +44,14 @@ def search_products(text):
                    s.name, s.location, s.phone
             FROM products p
             JOIN sellers s ON p.seller_id = s.id
-            WHERE (LOWER(p.name) LIKE %s OR LOWER(p.category) LIKE %s)
-              AND LOWER(s.location) LIKE %s
+            WHERE (
+                LOWER(p.name) LIKE %s
+                OR LOWER(p.category) LIKE %s
+            )
+            AND (
+                s.location IS NULL
+                OR LOWER(s.location) LIKE %s
+            )
         """, (f"%{product}%", f"%{product}%", f"%{location}%"))
     else:
         cur.execute("""
@@ -50,7 +59,8 @@ def search_products(text):
                    s.name, s.location, s.phone
             FROM products p
             JOIN sellers s ON p.seller_id = s.id
-            WHERE LOWER(p.name) LIKE %s OR LOWER(p.category) LIKE %s
+            WHERE LOWER(p.name) LIKE %s
+               OR LOWER(p.category) LIKE %s
         """, (f"%{product}%", f"%{product}%"))
 
     products = cur.fetchall()
@@ -61,7 +71,8 @@ def search_products(text):
         product_id = row[0]
 
         cur.execute("""
-            SELECT image_url FROM product_photos
+            SELECT image_url
+            FROM product_photos
             WHERE product_id = %s
         """, (product_id,))
 
@@ -373,6 +384,7 @@ def bot():
 
 if __name__ == "__main__":
     app.run()
+
 
 
 
