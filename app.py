@@ -93,19 +93,22 @@ def add_seller(name, phone, location):
 
     return seller_id
 
-def add_product(name, price, seller_id, category, image_url):
+def add_product(name, price, seller_id, category):
     conn = get_db()
     cur = conn.cursor()
 
     cur.execute("""
-        INSERT INTO products (name, price, seller_id, category, image_url)
-        VALUES (%s, %s, %s, %s, %s)
-    """, (name, price, seller_id, category, image_url))
+        INSERT INTO products (name, price, seller_id, category)
+        VALUES (%s, %s, %s, %s)
+        RETURNING id
+    """, (name, price, seller_id, category))
+
+    product_id = cur.fetchone()[0]
 
     conn.commit()
     cur.close()
     conn.close()
-    
+
     return product_id
 
 def get_seller_products(phone):
@@ -370,6 +373,7 @@ def bot():
 
 if __name__ == "__main__":
     app.run()
+
 
 
 
