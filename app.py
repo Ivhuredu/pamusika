@@ -68,10 +68,12 @@ def search_products(text):
         """, (f"%{product}%", f"%{product}%"))
 
     products = cur.fetchall()
+    logging.debug(f"DB returned {len(products)} products")
 
     results = []
 
     for row in products:
+        logging.debug(f"Product row: {row}")
         product_id = row[0]
 
         cur.execute("""
@@ -81,6 +83,7 @@ def search_products(text):
         """, (product_id,))
 
         photos = [r[0] for r in cur.fetchall()]
+        logging.debug(f"Found {len(photos)} photos for product {product_id}")
         results.append((*row, photos))
 
     cur.close()
@@ -388,6 +391,7 @@ def bot():
 
 if __name__ == "__main__":
     app.run()
+
 
 
 
