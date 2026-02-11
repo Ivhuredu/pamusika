@@ -371,7 +371,7 @@ def bot():
         msg.body("❌ No results found. Type MENU.")
         return str(resp)
 
-   for row in results:
+    for row in results:
         product_id, name, price, category, seller, location, phone, photos = row
 
         # Create a new message for each product
@@ -398,6 +398,7 @@ def bot():
 
 if __name__ == "__main__":
     app.run()
+
 
 
 
