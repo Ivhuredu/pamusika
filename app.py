@@ -361,7 +361,6 @@ def bot():
             "Example: cement"
         )
         return str(resp)
-
     # -----------------
     # SEARCH
     # -----------------
@@ -375,11 +374,15 @@ def bot():
     for row in results:
         product_id, name, price, category, seller, location, phone, photos = row
 
-        if photos:
-            for img in photos:
-                msg.media(img)
+        # Create a new message for this product
+        product_msg = resp.message()
 
-        msg.body(
+        # Send one image (optional: limit to first one only)
+        if photos:
+            product_msg.media(photos[0])
+
+        # Send product details
+        product_msg.body(
             f"{seller}\n"
             f"🛒 {name} ({category})\n"
             f"💵 {price}\n"
@@ -389,8 +392,11 @@ def bot():
 
     return str(resp)
 
+   
+
 if __name__ == "__main__":
     app.run()
+
 
 
 
