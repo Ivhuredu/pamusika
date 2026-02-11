@@ -372,21 +372,21 @@ def bot():
         return str(resp)
 
     for row in results:
-    product_id, name, price, category, seller, location, phone, photos = row
+        product_id, name, price, category, seller, location, phone, photos = row
 
-    details = (
-        f"{seller}\n"
-        f"🛒 {name} ({category})\n"
-        f"💵 {price}\n"
-        f"📍 {location}\n"
-        f"📞 {phone}"
-    )
+        details = (
+            f"{seller}\n"
+            f"🛒 {name} ({category})\n"
+            f"💵 {price}\n"
+            f"📍 {location}\n"
+            f"📞 {phone}"
+        )
 
-    product_msg = resp.message()
-    product_msg.body(details)
+        product_msg = resp.message()
+        product_msg.body(details)
 
-    if photos:
-        product_msg.media(photos[0])  # Only attach 1 image per message
+        if photos:
+            product_msg.media(photos[0])  # Only attach 1 image per message
 
     logging.debug("Finished sending results, returning response")
     return str(resp)
@@ -395,6 +395,7 @@ def bot():
 
 if __name__ == "__main__":
     app.run()
+
 
 
 
