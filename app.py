@@ -1,12 +1,15 @@
 user_states = {}
 user_data = {}
-
+import logging
 from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
 import psycopg2
 import os
 
 app = Flask(__name__)
+
+# Setup logging
+logging.basicConfig(level=logging.DEBUG)  # Or INFO for less detail
 
 # -------------------------
 # DATABASE CONNECTION
@@ -26,7 +29,7 @@ def get_db():
 # -------------------------
 def search_products(text):
     text = text.strip().lower()
-
+    logging.debug(f"Search input: {text}")
     if not text:
         return []
 
@@ -35,7 +38,7 @@ def search_products(text):
     product = parts[0]
     location = parts[1] if len(parts) > 1 else None
 
-
+    logging.debug(f"Parsed product: {product}, location: {location}")
     conn = get_db()
     cur = conn.cursor()
 
@@ -182,7 +185,7 @@ def add_product_photo(product_id, image_url):
     cur.close()
     conn.close()
 
-
+    logging.debug("Executed product search query")
 
 
 # -------------------------
@@ -192,7 +195,7 @@ def add_product_photo(product_id, image_url):
 def bot():
     user = request.form.get("From")
     incoming = request.form.get("Body", "").strip().lower()
-
+    logging.info(f"User: {user} | Incoming: {incoming}")
     resp = MessagingResponse()
     msg = resp.message()
 
@@ -385,6 +388,7 @@ def bot():
 
 if __name__ == "__main__":
     app.run()
+
 
 
 
