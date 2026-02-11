@@ -371,24 +371,20 @@ def bot():
         msg.body("❌ No results found. Type MENU.")
         return str(resp)
 
-    for row in results:
-        product_id, name, price, category, seller, location, phone, photos = row
+    first = results[0]
+    product_id, name, price, category, seller, location, phone, photos = first
 
-        # Create a new message for each product
-        product_msg = resp.message()
+    msg = resp.message()  # reuse the original message
+    if photos:
+        msg.media(photos[0])
 
-        # Add photo first (if any)
-        if photos:
-            product_msg.media(photos[0])  # Only send 1 photo to avoid blocking
-
-        # Add text last
-        product_msg.body(
-            f"{seller}\n"
-            f"🛒 {name} ({category})\n"
-            f"💵 {price}\n"
-            f"📍 {location}\n"
-            f"📞 {phone}"
-        )
+    msg.body(
+        f"{seller}\n"
+        f"🛒 {name} ({category})\n"
+        f"💵 {price}\n"
+        f"📍 {location}\n"
+        f"📞 {phone}"
+    )
 
 
     logging.debug("Finished sending results, returning response")
@@ -398,6 +394,7 @@ def bot():
 
 if __name__ == "__main__":
     app.run()
+
 
 
 
