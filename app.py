@@ -372,30 +372,30 @@ def bot():
         return str(resp)
 
     for row in results:
-        product_id, name, price, category, seller, location, phone, photos = row
+    product_id, name, price, category, seller, location, phone, photos = row
 
-        # Create a new message for this product
-        product_msg = resp.message()
+    details = (
+        f"{seller}\n"
+        f"🛒 {name} ({category})\n"
+        f"💵 {price}\n"
+        f"📍 {location}\n"
+        f"📞 {phone}"
+    )
 
-        # Send one image (optional: limit to first one only)
-        if photos:
-            product_msg.media(photos[0])
+    product_msg = resp.message()
+    product_msg.body(details)
 
-        # Send product details
-        product_msg.body(
-            f"{seller}\n"
-            f"🛒 {name} ({category})\n"
-            f"💵 {price}\n"
-            f"📍 {location}\n"
-            f"📞 {phone}"
-        )
+    if photos:
+        product_msg.media(photos[0])  # Only attach 1 image per message
 
+    logging.debug("Finished sending results, returning response")
     return str(resp)
 
    
 
 if __name__ == "__main__":
     app.run()
+
 
 
 
