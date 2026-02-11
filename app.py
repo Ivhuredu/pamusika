@@ -35,6 +35,7 @@ def search_products(text):
     product = parts[0]
     location = parts[1] if len(parts) > 1 else None
 
+
     conn = get_db()
     cur = conn.cursor()
 
@@ -384,6 +385,7 @@ def bot():
 
 if __name__ == "__main__":
     app.run()
+
 
 
 
