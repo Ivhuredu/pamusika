@@ -1,20 +1,20 @@
-user_states = {}
-user_data = {}
-import logging
-from flask import Flask, request
-from twilio.twiml.messaging_response import MessagingResponse
-import psycopg2
+# pamusika_facebook_bot/app.py
 import os
+import logging
+import requests
+from flask import Flask, request
+import psycopg2
 
 app = Flask(__name__)
 
-# Setup logging
-logging.basicConfig(level=logging.DEBUG)  # Or INFO for less detail
+logging.basicConfig(level=logging.DEBUG)
+
+user_states = {}
+user_data = {}
 
 # -------------------------
 # DATABASE CONNECTION
 # -------------------------
-
 def get_db():
     return psycopg2.connect(
         host=os.environ["DB_HOST"],
@@ -25,139 +25,53 @@ def get_db():
     )
 
 # -------------------------
-# SEARCH FUNCTION
+# DATABASE HELPERS
 # -------------------------
-def search_products(text):
-    text = text.strip().lower()
-    logging.debug(f"Search input: {text}")
-    if not text:
-        return []
-
-    parts = text.split()
-
-    product = parts[0]
-    location = parts[1] if len(parts) > 1 else None
-
-    logging.debug(f"Parsed product: {product}, location: {location}")
-    conn = get_db()
-    cur = conn.cursor()
-
-    if location:
-        cur.execute("""
-            SELECT p.id, p.name, p.price, p.category,
-                   s.name, s.location, s.phone
-            FROM products p
-            JOIN sellers s ON p.seller_id = s.id
-            WHERE (
-                LOWER(p.name) LIKE %s
-                OR LOWER(p.category) LIKE %s
-            )
-            AND (
-                s.location IS NULL
-                OR LOWER(s.location) LIKE %s
-            )
-        """, (f"%{product}%", f"%{product}%", f"%{location}%"))
-    else:
-        cur.execute("""
-            SELECT p.id, p.name, p.price, p.category,
-                   s.name, s.location, s.phone
-            FROM products p
-            JOIN sellers s ON p.seller_id = s.id
-            WHERE LOWER(p.name) LIKE %s
-               OR LOWER(p.category) LIKE %s
-        """, (f"%{product}%", f"%{product}%"))
-
-    products = cur.fetchall()
-    logging.debug(f"DB returned {len(products)} products")
-
-    results = []
-
-    for row in products:
-        logging.debug(f"Product row: {row}")
-        product_id = row[0]
-
-        cur.execute("""
-            SELECT image_url
-            FROM product_photos
-            WHERE product_id = %s
-        """, (product_id,))
-
-        photos = [r[0] for r in cur.fetchall()]
-        logging.debug(f"Found {len(photos)} photos for product {product_id}")
-        results.append((*row, photos))
-
-    cur.close()
-    conn.close()
-
-    return results
-
-
-
 def add_seller(name, phone, location):
     conn = get_db()
     cur = conn.cursor()
-
     cur.execute("""
         INSERT INTO sellers (name, phone, location)
         VALUES (%s, %s, %s)
         RETURNING id
     """, (name, phone, location))
-
     seller_id = cur.fetchone()[0]
-
     conn.commit()
     cur.close()
     conn.close()
-
     return seller_id
 
 def add_product(name, price, seller_id, category):
     conn = get_db()
     cur = conn.cursor()
-
     cur.execute("""
         INSERT INTO products (name, price, seller_id, category)
         VALUES (%s, %s, %s, %s)
         RETURNING id
     """, (name, price, seller_id, category))
-
     product_id = cur.fetchone()[0]
+    conn.commit()
+    cur.close()
+    conn.close()
+    return product_id
 
+def add_product_photo(product_id, image_url):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO product_photos (product_id, image_url)
+        VALUES (%s, %s)
+    """, (product_id, image_url))
     conn.commit()
     cur.close()
     conn.close()
 
-    return product_id
-
-def get_seller_products(phone):
-    conn = get_db()
-    cur = conn.cursor()
-
-    cur.execute("""
-        SELECT p.id, p.name, p.price, p.category
-        FROM products p
-        JOIN sellers s ON p.seller_id = s.id
-        WHERE s.phone = %s
-    """, (phone,))
-
-    results = cur.fetchall()
-
-    cur.close()
-    conn.close()
-
-    return results
-
-
 def update_product_price(product_id, new_price):
     conn = get_db()
     cur = conn.cursor()
-
     cur.execute("""
-        UPDATE products
-        SET price = %s
-        WHERE id = %s
+        UPDATE products SET price = %s WHERE id = %s
     """, (new_price, product_id))
-
     conn.commit()
     cur.close()
     conn.close()
@@ -165,261 +79,196 @@ def update_product_price(product_id, new_price):
 def delete_product(product_id):
     conn = get_db()
     cur = conn.cursor()
-
-    cur.execute("""
-        DELETE FROM products
-        WHERE id = %s
-    """, (product_id,))
-
+    cur.execute("DELETE FROM products WHERE id = %s", (product_id,))
     conn.commit()
     cur.close()
     conn.close()
 
-def add_product_photo(product_id, image_url):
+def get_seller_products(phone):
     conn = get_db()
     cur = conn.cursor()
-
     cur.execute("""
-        INSERT INTO product_photos (product_id, image_url)
-        VALUES (%s, %s)
-    """, (product_id, image_url))
-
-    conn.commit()
+        SELECT p.id, p.name, p.price, p.category
+        FROM products p
+        JOIN sellers s ON p.seller_id = s.id
+        WHERE s.phone = %s
+    """, (phone,))
+    results = cur.fetchall()
     cur.close()
     conn.close()
+    return results
 
-    logging.debug("Executed product search query")
+def search_products(text):
+    text = text.strip().lower()
+    logging.debug(f"Search input: {text}")
+    if not text:
+        return []
+    parts = text.split()
+    product = parts[0]
+    location = parts[1] if len(parts) > 1 else None
 
+    conn = get_db()
+    cur = conn.cursor()
+    if location:
+        cur.execute("""
+            SELECT p.id, p.name, p.price, p.category, s.name, s.location, s.phone
+            FROM products p
+            JOIN sellers s ON p.seller_id = s.id
+            WHERE (LOWER(p.name) LIKE %s OR LOWER(p.category) LIKE %s)
+              AND (s.location IS NULL OR LOWER(s.location) LIKE %s)
+        """, (f"%{product}%", f"%{product}%", f"%{location}%"))
+    else:
+        cur.execute("""
+            SELECT p.id, p.name, p.price, p.category, s.name, s.location, s.phone
+            FROM products p
+            JOIN sellers s ON p.seller_id = s.id
+            WHERE LOWER(p.name) LIKE %s OR LOWER(p.category) LIKE %s
+        """, (f"%{product}%", f"%{product}%"))
+
+    products = cur.fetchall()
+    results = []
+    for row in products:
+        product_id = row[0]
+        cur.execute("SELECT image_url FROM product_photos WHERE product_id = %s", (product_id,))
+        photos = [r[0] for r in cur.fetchall()]
+        results.append((*row, photos))
+    cur.close()
+    conn.close()
+    return results
 
 # -------------------------
-# WHATSAPP WEBHOOK
+# FACEBOOK MESSENGER SUPPORT
 # -------------------------
-@app.route("/webhook", methods=["POST"])
-def bot():
-    user = request.form.get("From")
-    incoming = request.form.get("Body", "").strip().lower()
-    logging.info(f"User: {user} | Incoming: {incoming}")
-    resp = MessagingResponse()
-    msg = resp.message()
+def send_message(recipient_id, text, media_url=None):
+    payload = {
+        "recipient": {"id": recipient_id},
+        "message": {}
+    }
+    if media_url:
+        payload["message"] = {
+            "attachment": {
+                "type": "image",
+                "payload": {"url": media_url, "is_reusable": True}
+            }
+        }
+    else:
+        payload["message"]["text"] = text
 
-    # -----------------
-    # REGISTRATION FLOW
-    # -----------------
+    params = {"access_token": os.environ["FB_PAGE_ACCESS_TOKEN"]}
+    headers = {"Content-Type": "application/json"}
+    requests.post("https://graph.facebook.com/v18.0/me/messages", json=payload, params=params, headers=headers)
+
+# -------------------------
+# MAIN BOT LOGIC
+# -------------------------
+def handle_message(user, incoming):
+    if incoming in ["menu", "hi", "hello", "start"]:
+        send_message(user, "\U0001F6D2 PaMusika Marketplace\n\n\U0001F50D Type product name\n\U0001F4DD Type REGISTER to sell\n\nExample: cement")
+        return
 
     if incoming == "register":
         user_states[user] = "name"
         user_data[user] = {}
-        msg.body("🏪 Enter your business name:")
-        return str(resp)
+        send_message(user, "\U0001F3EA Enter your business name:")
+        return
 
-    if user_states.get(user) == "name":
+    state = user_states.get(user)
+    if state == "name":
         user_data[user]["name"] = incoming
         user_states[user] = "phone"
-        msg.body("📞 Enter your phone number:")
-        return str(resp)
-
-    if user_states.get(user) == "phone":
+        send_message(user, "\U0001F4DE Enter your phone number:")
+    elif state == "phone":
         user_data[user]["phone"] = incoming
         user_states[user] = "location"
-        msg.body("📍 Enter your location:")
-        return str(resp)
-
-    if user_states.get(user) == "location":
+        send_message(user, "\U0001F4CD Enter your location:")
+    elif state == "location":
         user_data[user]["location"] = incoming
-
-        seller_id = add_seller(
-            user_data[user]["name"],
-            user_data[user]["phone"],
-            user_data[user]["location"]
-        )
-
+        seller_id = add_seller(user_data[user]["name"], user_data[user]["phone"], user_data[user]["location"])
         user_data[user]["seller_id"] = seller_id
         user_states[user] = "product"
-
-        msg.body("📦 Enter product name:")
-        return str(resp)
-
-    if user_states.get(user) == "product":
+        send_message(user, "\U0001F4E6 Enter product name:")
+    elif state == "product":
         user_data[user]["product"] = incoming
         user_states[user] = "category"
-        msg.body("📂 Enter category:")
-        return str(resp)
-
-    if user_states.get(user) == "category":
+        send_message(user, "\U0001F4C2 Enter category:")
+    elif state == "category":
         user_data[user]["category"] = incoming
         user_states[user] = "price"
-        msg.body("💵 Enter price:")
-        return str(resp)
-
-    # SAVE PRODUCT (NO PHOTO YET)
-    if user_states.get(user) == "price":
-        product_id = add_product(
-            user_data[user]["product"],
-            incoming,
-            user_data[user]["seller_id"],
-            user_data[user]["category"]
-        )
-
+        send_message(user, "\U0001F4B5 Enter price:")
+    elif state == "price":
+        product_id = add_product(user_data[user]["product"], incoming, user_data[user]["seller_id"], user_data[user]["category"])
         user_data[user]["product_id"] = product_id
         user_states[user] = "photo_optional"
-
-        msg.body(
-            "📷 Send product photo (optional).\n"
-            "Send multiple photos or type DONE.\n"
-            "Type SKIP if none."
-        )
-        return str(resp)
-
-    # PHOTO HANDLING
-    if user_states.get(user) == "photo_optional":
-
-        image_url = request.form.get("MediaUrl0")
-
-        if incoming == "skip":
+        send_message(user, "\U0001F4F7 Send product photo (optional), type DONE or SKIP")
+    elif state == "photo_optional":
+        if incoming == "skip" or incoming == "done":
             user_states[user] = "more"
-            msg.body("✅ Product saved!\nAdd another product? (yes/no)")
-            return str(resp)
-
-        if image_url:
-            add_product_photo(user_data[user]["product_id"], image_url)
-            msg.body("📸 Photo added! Send another or type DONE")
-            return str(resp)
-
-        if incoming == "done":
-            user_states[user] = "more"
-            msg.body("✅ Product saved!\nAdd another product? (yes/no)")
-            return str(resp)
-
-        msg.body("Send photo, DONE or SKIP")
-        return str(resp)
-
-    # ADD MORE PRODUCTS
-    if user_states.get(user) == "more":
-
+            send_message(user, "✅ Product saved! Add another? (yes/no)")
+        else:
+            # Photo must be handled through attachments in Messenger payloads
+            send_message(user, "Send image attachment or type DONE/SKIP")
+    elif state == "more":
         if incoming == "yes":
             user_states[user] = "product"
-            msg.body("📦 Enter next product name:")
-            return str(resp)
-
-        if incoming == "no":
+            send_message(user, "\U0001F4E6 Enter next product name:")
+        else:
             user_states.pop(user)
             user_data.pop(user)
-            msg.body("🎉 Registration complete!")
-            return str(resp)
-
-    # -----------------
-    # SELLER MANAGEMENT
-    # -----------------
-
-    if incoming == "myproducts":
-        phone = request.form.get("From").split(":")[-1]
+            send_message(user, "\U0001F389 Registration complete!")
+    elif incoming == "myproducts":
+        phone = user_data.get(user, {}).get("phone", "")
         products = get_seller_products(phone)
-
         if not products:
-            msg.body("❌ No products listed.")
-            return str(resp)
-
-        reply = "📦 Your products:\n\n"
-
+            send_message(user, "❌ No products listed.")
+            return
+        reply = "\U0001F4E6 Your products:\n\n"
         for pid, name, price, category in products:
             reply += f"{pid}. {name} ({category}) - {price}\n"
-
         reply += "\nEdit: edit ID NEWPRICE\nDelete: delete ID"
-
-        msg.body(reply)
-        return str(resp)
-
-    if incoming.startswith("edit"):
+        send_message(user, reply)
+    elif incoming.startswith("edit"):
         parts = incoming.split()
         if len(parts) < 3:
-            msg.body("edit PRODUCT_ID NEWPRICE")
-            return str(resp)
-
-        update_product_price(parts[1], parts[2])
-        msg.body("✅ Price updated")
-        return str(resp)
-
-    if incoming.startswith("delete"):
+            send_message(user, "edit PRODUCT_ID NEWPRICE")
+        else:
+            update_product_price(parts[1], parts[2])
+            send_message(user, "✅ Price updated")
+    elif incoming.startswith("delete"):
         parts = incoming.split()
         if len(parts) < 2:
-            msg.body("delete PRODUCT_ID")
-            return str(resp)
+            send_message(user, "delete PRODUCT_ID")
+        else:
+            delete_product(parts[1])
+            send_message(user, "\U0001F5D1 Product deleted")
+    else:
+        results = search_products(incoming)
+        if not results:
+            send_message(user, "❌ No results found. Type MENU.")
+            return
+        for row in results:
+            pid, name, price, category, seller, location, phone, photos = row
+            if photos:
+                send_message(user, photos[0])
+            send_message(user, f"{seller}\n\U0001F6D2 {name} ({category})\n\U0001F4B5 {price}\n\U0001F4CD {location}\n\U0001F4DE {phone}")
 
-        delete_product(parts[1])
-        msg.body("🗑 Product deleted")
-        return str(resp)
+# -------------------------
+# FACEBOOK WEBHOOK ROUTE
+# -------------------------
+@app.route("/webhook", methods=["GET", "POST"])
+def webhook():
+    if request.method == "GET":
+        if request.args.get("hub.verify_token") == os.environ["FB_VERIFY_TOKEN"]:
+            return request.args.get("hub.challenge"), 200
+        return "Unauthorized", 403
 
-    # -----------------
-    # MENU
-    # -----------------
-
-    if incoming in ["menu", "hi", "hello", "start"]:
-        msg.body(
-            "🛒 PaMusika Marketplace\n\n"
-            "🔍 Type product name\n"
-            "📝 Type REGISTER to sell\n\n"
-            "Example: cement"
-        )
-        return str(resp)
-    # -----------------
-    # SEARCH
-    # -----------------
-
-    results = search_products(incoming)
-
-    if not results:
-        msg.body("❌ No results found. Type MENU.")
-        return str(resp)
-
-    first = results[0]
-    product_id, name, price, category, seller, location, phone, photos = first
-
-    msg = resp.message()  # reuse the original message
-    if photos:
-        msg.media(photos[0])
-
-    msg.body(
-        f"{seller}\n"
-        f"🛒 {name} ({category})\n"
-        f"💵 {price}\n"
-        f"📍 {location}\n"
-        f"📞 {phone}"
-    )
-
-
-    logging.debug("Finished sending results, returning response")
-    return str(resp)
-
-   
+    data = request.get_json()
+    for entry in data.get("entry", []):
+        for msg in entry.get("messaging", []):
+            sender = msg["sender"]["id"]
+            if "message" in msg and "text" in msg["message"]:
+                incoming = msg["message"]["text"].lower()
+                handle_message(sender, incoming)
+    return "ok", 200
 
 if __name__ == "__main__":
-    app.run()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
