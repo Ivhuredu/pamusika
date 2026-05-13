@@ -270,6 +270,18 @@ def webhook():
                 handle_message(sender, incoming)
     return "ok", 200
 
+@app.route("/privacy")
+def privacy():
+    return "<h1>Privacy Policy</h1><p>We do not collect or share your data. All interactions are initiated by users via WhatsApp.</p>"
+
+@app.route("/terms")
+def terms():
+    return "<h1>Terms of Service</h1><p>Use of the bot is free and experimental. Use at your own discretion.</p>"
+
+@app.route("/delete-my-data")
+def delete_data():
+    return "<h1>Data Deletion</h1><p>To delete your data, please contact us via WhatsApp and we’ll erase it from our records.</p>"
+
 if __name__ == "__main__":
     app.run(debug=True)
 
