@@ -279,9 +279,12 @@ def terms():
     return "<h1>Terms of Service</h1><p>Use of the bot is free and experimental. Use at your own discretion.</p>"
 
 @app.route("/delete-my-data")
-def delete_data():
-    return "<h1>Data Deletion</h1><p>To delete your data, please contact us via WhatsApp and we’ll erase it from our records.</p>"
-
+def delete_my_data():
+    return """
+    <h1>Data Deletion Instructions</h1>
+    <p>If you want us to delete your data, please send a message via our chatbot saying <strong>"DELETE MY DATA"</strong>.
+    We will remove your associated records.</p>
+    """
 if __name__ == "__main__":
     app.run(debug=True)
 
